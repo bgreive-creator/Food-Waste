@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoFridge - Food Waste Tracker</title>
+    <meta name="description"
+        content="Reduce food waste, save money, and help the planet with EcoFridge trackers and community sharing.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">🌿</div>
+                <span>EcoFridge</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-page="fridge">
+                    <span class="icon">🍎</span>
+                    <span class="label">Fridge</span>
+                </li>
+                <li data-page="recipes">
+                    <span class="icon">🍳</span>
+                    <span class="label">Recipes</span>
+                </li>
+                <li data-page="impact">
+                    <span class="icon">🌍</span>
+                    <span class="label">Impact</span>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="avatar">B</div>
+                    <div class="user-info">
+                        <span class="name">Bryan</span>
+                        <span class="stats">Eco Warrior</span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <header class="top-bar">
+                <h1 id="page-title">My Fridge</h1>
+                <div class="actions">
+                    <button id="add-item-btn" class="btn-primary">+ Add Item</button>
+                </div>
+            </header>
+
+            <div id="app-view" class="view-container">
+                <!-- Page content will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-container" class="modal-overlay hidden">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h2 id="modal-title">Add Food Item</h2>
+                <button class="close-modal">&times;</button>
+            </header>
+            <div id="modal-body">
+                <!-- Modal content injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Snackbar for Undo -->
+    <div id="snackbar">
+        <span id="snackbar-msg">Item marked as used.</span>
+        <button id="undo-btn">Undo</button>
+    </div>
+
+    <!-- Scripts loaded in order -->
+    <script src="impact.js"></script>
+    <script src="fridge.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
