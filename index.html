@@ -35,15 +35,6 @@
                     <span class="label">Impact</span>
                 </li>
             </ul>
-            <div class="sidebar-footer">
-                <div class="user-profile">
-                    <div class="avatar">B</div>
-                    <div class="user-info">
-                        <span class="name">Bryan</span>
-                        <span class="stats">Eco Warrior</span>
-                    </div>
-                </div>
-            </div>
         </nav>
 
         <!-- Main Content -->
@@ -54,6 +45,8 @@
                     <button id="add-item-btn" class="btn-primary">+ Add Item</button>
                 </div>
             </header>
+
+            <div id="notification-area"></div>
 
             <div id="app-view" class="view-container">
                 <!-- Page content will be injected here -->
@@ -81,6 +74,8 @@
     </div>
 
     <!-- Scripts loaded in order -->
+    <script src="foodData.js"></script>
+    <script src="recipes.js"></script>
     <script src="impact.js"></script>
     <script src="fridge.js"></script>
     <script src="app.js"></script>
