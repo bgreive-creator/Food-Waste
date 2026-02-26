@@ -55,11 +55,6 @@ window.renderFridge = function (container, inventory) {
 function showAddSelectionModal() {
     const selectionHTML = `
         <div class="entry-options">
-            <div class="entry-option-card" id="opt-camera">
-                <div class="option-icon">📸</div>
-                <h3>AI Photo Scan</h3>
-                <p>Take a picture of food items to automatically identify them.</p>
-            </div>
             <div class="entry-option-card" id="opt-receipt">
                 <div class="option-icon">🧾</div>
                 <h3>Scan Receipt</h3>
@@ -75,122 +70,16 @@ function showAddSelectionModal() {
 
     window.openModal('How would you like to add items?', selectionHTML);
 
-    document.getElementById('opt-camera').addEventListener('click', startAIScan);
     document.getElementById('opt-receipt').addEventListener('click', startReceiptScan);
     document.getElementById('opt-manual').addEventListener('click', showManualForm);
 }
 
-let activeStream = null;
-
-async function startCamera(videoElement) {
-    try {
-        if (activeStream) stopCamera();
-        activeStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' },
-            audio: false
-        });
-        videoElement.srcObject = activeStream;
-        await videoElement.play();
-        return true;
-    } catch (err) {
-        console.error("Camera error:", err);
-        videoElement.parentElement.innerHTML = `<div class="ai-suggestion-msg" style="background:#FFEBEE; color:#C62828">Camera access denied or unavailable. Please ensure you are on a secure connection (HTTPS).</div>`;
-        return false;
-    }
-}
-
-function stopCamera() {
-    if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
-        activeStream = null;
-    }
-}
-
-// Override closeModal to ensure camera stops
-const originalCloseModal = window.closeModal;
-window.closeModal = function () {
-    stopCamera();
-    originalCloseModal();
-};
-
-function startAIScan() {
-    window.openModal('AI Photo Scan', `
-        <div class="ai-scan-container">
-            <div class="camera-preview">
-                <video id="scan-video" autoplay playsinline></video>
-                <div class="scanner-line"></div>
-                <button id="capture-item-btn" class="capture-btn" title="Capture Item"></button>
-            </div>
-            <div id="ai-status" class="ai-feedback">
-                <p>Align item in frame and tap the button to scan...</p>
-            </div>
-        </div>
-    `);
-
-    const video = document.getElementById('scan-video');
-    startCamera(video);
-
-    document.getElementById('capture-item-btn').addEventListener('click', () => {
-        const status = document.getElementById('ai-status');
-        status.innerHTML = `
-            <p>Analyzing item with Eco-AI...</p>
-            <div class="progress-bar"><div class="progress-fill animate-scan"></div></div>
-        `;
-
-        // Hide capture button during "analysis"
-        document.getElementById('capture-item-btn').style.display = 'none';
-
-        setTimeout(() => {
-            // Simulated AI Confidence Check
-            const confidence = Math.random();
-            const confidenceThreshold = 0.15; // 15% chance of being "unsure"
-
-            if (confidence < confidenceThreshold) {
-                const status = document.getElementById('ai-status');
-                status.innerHTML = `
-                    <div class="ai-suggestion-msg" style="background:#FFF3E0; color:#E65100; border-left: 4px solid #EF6C00; padding: 12px; margin-top: 12px; border-radius: 4px;">
-                        <strong>Eco-AI is unsure:</strong> I couldn't confidently identify a food item in this frame. Please try again or use manual entry.
-                    </div>
-                `;
-                // Re-show capture button so they can try again
-                const captureBtn = document.getElementById('capture-item-btn');
-                if (captureBtn) {
-                    captureBtn.style.display = 'block';
-                    captureBtn.style.background = 'rgba(255,255,255,0.8)'; // Make it look distinct
-                }
-                return;
-            }
-
-            // Use the comprehensive Food Database for recognition
-            const db = window.FOOD_DATABASE || [
-                { name: 'Red Bell Pepper', category: 'Vegetables', shelfLife: 7 },
-                { name: 'Greek Yogurt', category: 'Dairy', shelfLife: 14 },
-                { name: 'Strawberries', category: 'Fruit', shelfLife: 3 }
-            ];
-
-            // Randomly select an item from the food database
-            const baseItem = db[Math.floor(Math.random() * db.length)];
-            const detectedItem = {
-                name: baseItem.name,
-                category: baseItem.category,
-                quantity: '1 unit' // Default quantity
-            };
-
-            // Set expiry based on the item's specific shelf life
-            const expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + (baseItem.shelfLife || 7));
-            detectedItem.expiry = expiryDate.toISOString().split('T')[0];
-
-            showManualForm(detectedItem, 'AI detected this food item:');
-        }, 2500);
-    });
-}
 
 function startReceiptScan() {
     window.openModal('Scan Receipt', `
         <div class="ai-scan-container">
             <div class="receipt-preview">
-                <video id="receipt-video" autoplay playsinline></video>
+                <video id="receipt-video" autoplay playsinline muted></video>
                 <div class="scanner-line"></div>
                 <button id="capture-receipt-btn" class="capture-btn" title="Capture Receipt"></button>
             </div>
@@ -201,37 +90,144 @@ function startReceiptScan() {
     `);
 
     const video = document.getElementById('receipt-video');
-    startCamera(video);
+    // Give the DOM a moment to settle
+    setTimeout(() => {
+        if (video) startCamera(video);
+    }, 100);
 
     document.getElementById('capture-receipt-btn').addEventListener('click', () => {
         const status = document.getElementById('receipt-status');
         status.innerHTML = `
-            <p>Extracting data from receipt...</p>
+            <p>AI is scanning for food items...</p>
             <div class="progress-bar"><div class="progress-fill animate-scan"></div></div>
         `;
         document.getElementById('capture-receipt-btn').style.display = 'none';
 
+        // Simulate AI extraction and filtering
         setTimeout(() => {
-            const receiptItems = [
-                { name: '2% Milk', category: 'Dairy', quantity: '1 Gal' },
-                { name: 'Bananas', category: 'Fruit', quantity: '1 bunch' },
-                { name: 'Chicken Breast', category: 'Meat', quantity: '1.2 lbs' },
-                { name: 'Cheddar Cheese', category: 'Dairy', quantity: '8 oz' }
+            const rawExtractedItems = [
+                { name: '2% Milk', quantity: '1 Gal' },
+                { name: 'Paper Towels', quantity: '2 pack' }, // Non-food
+                { name: 'Bananas', quantity: '1 bunch' },
+                { name: 'Chicken Breast', quantity: '1.2 lbs' },
+                { name: 'Dish Soap', quantity: '24 oz' }, // Non-food
+                { name: 'Cheddar Cheese', quantity: '8 oz' },
+                { name: 'Batteries AA', quantity: '4 pack' } // Non-food
             ];
 
-            receiptItems.forEach(item => {
-                item.id = Date.now() + Math.random();
-                // Expiry based on "today"
+            // Filter for food items only using our database
+            const foodItems = rawExtractedItems.filter(item => {
+                const searchName = item.name.toLowerCase();
+                return window.FOOD_DATABASE.some(dbItem =>
+                    searchName.includes(dbItem.name.toLowerCase()) ||
+                    dbItem.name.toLowerCase().includes(searchName)
+                );
+            }).map((item, index) => {
+                // Find match in DB for expiry estimation
+                const dbMatch = window.FOOD_DATABASE.find(dbItem =>
+                    item.name.toLowerCase().includes(dbItem.name.toLowerCase()) ||
+                    dbItem.name.toLowerCase().includes(item.name.toLowerCase())
+                ) || { category: 'Other', shelfLife: 7 };
+
                 const expiry = new Date();
-                expiry.setDate(expiry.getDate() + 7); // Default 1 week for receipt items
-                item.expiry = expiry.toISOString().split('T')[0];
-                item.shared = false;
-                window.appState.inventory.push(item);
+                expiry.setDate(expiry.getDate() + dbMatch.shelfLife);
+
+                return {
+                    id: Date.now() + index,
+                    name: item.name,
+                    category: dbMatch.category,
+                    quantity: item.quantity,
+                    expiry: expiry.toISOString().split('T')[0]
+                };
             });
 
-            saveAndRefresh();
-            window.openModal('Success!', `<p>Added <strong>${receiptItems.length}</strong> items from your receipt!</p><button class="btn-primary full-width" onclick="window.closeModal()">Awesome</button>`);
+            showReceiptPreview(foodItems);
         }, 3000);
+    });
+}
+
+function showReceiptPreview(items) {
+    window.receiptPreviewItems = items; // Store globally for editing
+
+    const renderPreviewList = () => {
+        if (window.receiptPreviewItems.length === 0) {
+            return `<div class="receipt-scan-status">No food items were identified on this receipt.</div>`;
+        }
+
+        return `
+            <div class="receipt-summary">
+                <span class="total-info">Identified ${window.receiptPreviewItems.length} food items</span>
+                <span class="text-muted">Non-food items were ignored.</span>
+            </div>
+            <table class="receipt-preview-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Category</th>
+                        <th>Expiry</th>
+                        <th>Qty</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${window.receiptPreviewItems.map((item, index) => `
+                        <tr>
+                            <td><input type="text" value="${item.name}" onchange="updatePreviewItem(${index}, 'name', this.value)"></td>
+                            <td>
+                                <select onchange="updatePreviewItem(${index}, 'category', this.value)">
+                                    ${['Dairy', 'Vegetables', 'Meat', 'Fruit', 'Bakery', 'Pantry', 'Grains', 'Other'].map(cat =>
+            `<option value="${cat}" ${item.category === cat ? 'selected' : ''}>${cat}</option>`
+        ).join('')}
+                                </select>
+                            </td>
+                            <td><input type="date" value="${item.expiry}" onchange="updatePreviewItem(${index}, 'expiry', this.value)"></td>
+                            <td><input type="text" value="${item.quantity}" onchange="updatePreviewItem(${index}, 'quantity', this.value)"></td>
+                            <td><button class="btn-remove-item" onclick="removePreviewItem(${index})">✕</button></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    };
+
+    const previewHTML = `
+        <div class="receipt-preview-container">
+            <div id="preview-list-container">
+                ${renderPreviewList()}
+            </div>
+            <div class="preview-actions">
+                <button class="btn-secondary" onclick="window.closeModal()">Cancel</button>
+                <button class="btn-primary" id="finalize-receipt-btn" ${items.length === 0 ? 'disabled' : ''}>Add to Fridge</button>
+            </div>
+        </div>
+    `;
+
+    window.openModal('Review Items', previewHTML);
+
+    // Context-sensitive window functions for the preview
+    window.updatePreviewItem = (index, field, value) => {
+        window.receiptPreviewItems[index][field] = value;
+    };
+
+    window.removePreviewItem = (index) => {
+        window.receiptPreviewItems.splice(index, 1);
+        const container = document.getElementById('preview-list-container');
+        if (container) container.innerHTML = renderPreviewList();
+        if (window.receiptPreviewItems.length === 0) {
+            document.getElementById('finalize-receipt-btn').disabled = true;
+        }
+    };
+
+    document.getElementById('finalize-receipt-btn').addEventListener('click', () => {
+        window.receiptPreviewItems.forEach(item => {
+            item.shared = false;
+            window.appState.inventory.push(item);
+        });
+        saveAndRefresh();
+        window.closeModal();
+        if (window.showSuccessBanner) {
+            window.showSuccessBanner(`Added ${window.receiptPreviewItems.length} items from receipt!`);
+        }
     });
 }
 
@@ -452,14 +448,16 @@ function getCategoryIcon(cat) {
 
 function attachListListeners() {
     document.querySelectorAll('.use-btn').forEach(btn => btn.onclick = (e) => {
-        const row = e.target.closest('.inventory-row');
-        const id = parseInt(row.dataset.id);
+        const row = e.currentTarget.closest('.inventory-row');
+        const id = Number(row.dataset.id);
 
         // Visual feedback
         row.classList.add('item-fading');
 
         setTimeout(() => {
-            const item = window.appState.inventory.find(i => i.id === id);
+            const item = window.appState.inventory.find(i => Number(i.id) === id);
+
+            if (!item) return; // Guard against rapid clicks or race conditions
 
             // Record to history
             window.appState.history.push({
@@ -483,8 +481,10 @@ function attachListListeners() {
     });
 
     document.querySelectorAll('.delete-btn').forEach(btn => btn.onclick = (e) => {
-        const id = parseInt(e.target.closest('.inventory-row').dataset.id);
-        const item = window.appState.inventory.find(i => i.id === id);
+        const id = Number(e.currentTarget.closest('.inventory-row').dataset.id);
+        const item = window.appState.inventory.find(i => Number(i.id) === id);
+
+        if (!item) return;
 
         // Record as waste
         window.appState.history.push({
@@ -493,7 +493,7 @@ function attachListListeners() {
             date: new Date().toISOString()
         });
 
-        window.appState.inventory = window.appState.inventory.filter(i => i.id !== id);
+        window.appState.inventory = window.appState.inventory.filter(i => Number(i.id) !== id);
         saveAndRefresh();
     });
 
@@ -519,3 +519,62 @@ function saveAndRefresh() {
     localStorage.setItem('ecofridge_history', JSON.stringify(window.appState.history));
     window.renderPage();
 }
+
+function startCamera(videoElement) {
+    const status = document.getElementById('receipt-status');
+
+    // Check for Secure Context (required for camera in most browsers)
+    if (window.location.protocol === 'file:' || !window.isSecureContext) {
+        console.warn("Camera access usually requires HTTPS or localhost.");
+        if (status) {
+            status.innerHTML = `
+                <p style="color:var(--danger)"><strong>Security Restriction:</strong> Camera access often requires an HTTPS connection or localhost.</p>
+                <p style="font-size:0.8rem; margin-top:5px;">If you are running this locally from a file, try using a local server (like "Live Server" in VS Code) or check browser permissions.</p>
+            `;
+        }
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error("Camera API not supported");
+        if (status && !status.innerHTML.includes('Security Restriction')) {
+            status.innerHTML = `<p style="color:var(--danger)">Your browser does not support camera access.</p>`;
+        }
+        return;
+    }
+
+    const constraints = {
+        video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+        }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+            videoElement.srcObject = stream;
+            videoElement.play().catch(e => console.error("Auto-play failed:", e));
+            // Store stream for stopping later
+            window.activeVideoStream = stream;
+            if (status) status.innerHTML = `<p>Camera active. Align receipt and scan.</p>`;
+        })
+        .catch(err => {
+            console.error("Error accessing camera:", err);
+            if (status) {
+                status.innerHTML = `
+                    <p style="color:var(--danger)">Unable to access camera: ${err.name}</p>
+                    <p style="font-size:0.8rem">Check that you've granted camera permissions and no other app is using it.</p>
+                `;
+            }
+        });
+}
+
+// Clean up camera when modal closes
+const originalCloseModal = window.closeModal;
+window.closeModal = function () {
+    if (window.activeVideoStream) {
+        window.activeVideoStream.getTracks().forEach(track => track.stop());
+        window.activeVideoStream = null;
+    }
+    originalCloseModal();
+};
