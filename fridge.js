@@ -81,10 +81,11 @@ function startReceiptScan() {
             <div class="receipt-preview">
                 <video id="receipt-video" autoplay playsinline muted></video>
                 <div class="scanner-line"></div>
+                <div id="camera-flash" class="camera-flash"></div>
                 <button id="capture-receipt-btn" class="capture-btn" title="Capture Receipt"></button>
             </div>
             <div id="receipt-status" class="ai-feedback">
-                <p>Align receipt and tap to scan...</p>
+                <p>Align receipt and tap the camera button to scan...</p>
             </div>
         </div>
     `);
@@ -95,55 +96,147 @@ function startReceiptScan() {
         if (video) startCamera(video);
     }, 100);
 
-    document.getElementById('capture-receipt-btn').addEventListener('click', () => {
+    document.getElementById('capture-receipt-btn').addEventListener('click', async () => {
+        const flash = document.getElementById('camera-flash');
         const status = document.getElementById('receipt-status');
+        const btn = document.getElementById('capture-receipt-btn');
+        const video = document.getElementById('receipt-video');
+
+        // 1. Visual Flash Effect
+        if (flash) {
+            flash.classList.add('animate-flash');
+            setTimeout(() => flash.classList.remove('animate-flash'), 500);
+        }
+
+        // 2. Capture Frame from Video
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        // 3. "Freeze" camera by pausing video
+        if (video) video.pause();
+
+        // 4. Update Status for OCR
         status.innerHTML = `
-            <p>AI is scanning for food items...</p>
-            <div class="progress-bar"><div class="progress-fill animate-scan"></div></div>
+            <p>OCR is reading receipt text...</p>
+            <div class="progress-bar"><div id="ocr-progress" class="progress-fill" style="width: 0%"></div></div>
         `;
-        document.getElementById('capture-receipt-btn').style.display = 'none';
+        btn.style.display = 'none';
 
-        // Simulate AI extraction and filtering
-        setTimeout(() => {
-            const rawExtractedItems = [
-                { name: '2% Milk', quantity: '1 Gal' },
-                { name: 'Paper Towels', quantity: '2 pack' }, // Non-food
-                { name: 'Bananas', quantity: '1 bunch' },
-                { name: 'Chicken Breast', quantity: '1.2 lbs' },
-                { name: 'Dish Soap', quantity: '24 oz' }, // Non-food
-                { name: 'Cheddar Cheese', quantity: '8 oz' },
-                { name: 'Batteries AA', quantity: '4 pack' } // Non-food
-            ];
-
-            // Filter for food items only using our database
-            const foodItems = rawExtractedItems.filter(item => {
-                const searchName = item.name.toLowerCase();
-                return window.FOOD_DATABASE.some(dbItem =>
-                    searchName.includes(dbItem.name.toLowerCase()) ||
-                    dbItem.name.toLowerCase().includes(searchName)
-                );
-            }).map((item, index) => {
-                // Find match in DB for expiry estimation
-                const dbMatch = window.FOOD_DATABASE.find(dbItem =>
-                    item.name.toLowerCase().includes(dbItem.name.toLowerCase()) ||
-                    dbItem.name.toLowerCase().includes(item.name.toLowerCase())
-                ) || { category: 'Other', shelfLife: 7 };
-
-                const expiry = new Date();
-                expiry.setDate(expiry.getDate() + dbMatch.shelfLife);
-
-                return {
-                    id: Date.now() + index,
-                    name: item.name,
-                    category: dbMatch.category,
-                    quantity: item.quantity,
-                    expiry: expiry.toISOString().split('T')[0]
-                };
+        try {
+            // Perform actual OCR
+            const worker = await Tesseract.createWorker('eng', 1, {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        const progress = Math.floor(m.progress * 100);
+                        const progressBar = document.getElementById('ocr-progress');
+                        if (progressBar) progressBar.style.width = `${progress}%`;
+                    }
+                }
             });
 
+            const { data: { text } } = await worker.recognize(imageData);
+            await worker.terminate();
+
+            console.log("OCR Result:", text);
+
+            if (!text || text.trim().length < 5) {
+                status.innerHTML = `<p style="color:var(--danger)">No text found in scan. Please try again with a clearer picture.</p>`;
+                setTimeout(() => {
+                    btn.style.display = 'flex';
+                    if (video) video.play();
+                }, 3000);
+                return;
+            }
+
+            const foodItems = extractFoodFromText(text);
+
+            if (foodItems.length === 0) {
+                status.innerHTML = `<p>No food items found on this scan.</p>`;
+                setTimeout(() => {
+                    btn.style.display = 'flex';
+                    if (video) video.play();
+                }, 3000);
+                return;
+            }
+
             showReceiptPreview(foodItems);
-        }, 3000);
+        } catch (error) {
+            console.error("OCR Error:", error);
+            status.innerHTML = `<p style="color:var(--danger)">Scan failed. Please try again.</p>`;
+            btn.style.display = 'flex';
+        }
     });
+}
+
+function extractFoodFromText(text) {
+    const lines = text.split('\n');
+    const detectedItems = [];
+
+    // Common Grocery Abbreviations Map
+    const abbreviations = {
+        'chkn': 'chicken',
+        'brst': 'breast',
+        'vgtbl': 'vegetable',
+        'frsh': 'fresh',
+        'org': 'organic',
+        'whl': 'whole',
+        'mrlk': 'milk',
+        'bnn': 'banana',
+        'appl': 'apple',
+        'ptto': 'potato',
+        'onnn': 'onion',
+        'grnd': 'ground',
+        'bf': 'beef',
+        'stk': 'steak',
+        'chse': 'cheese',
+        'yd': 'yogurt',
+        'tmt': 'tomato',
+        'strwbry': 'strawberry',
+        'blwbry': 'blueberry'
+    };
+
+    lines.forEach((line, index) => {
+        let cleanLine = line.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+        if (!cleanLine || cleanLine.length < 3) return;
+
+        // Try to expand abbreviations
+        Object.keys(abbreviations).forEach(abbr => {
+            const regex = new RegExp(`\\b${abbr}\\b`, 'g');
+            cleanLine = cleanLine.replace(regex, abbreviations[abbr]);
+        });
+
+        // Check against FOOD_DATABASE
+        const match = window.FOOD_DATABASE.find(dbItem => {
+            const dbName = dbItem.name.toLowerCase();
+            return cleanLine.includes(dbName) || dbName.includes(cleanLine);
+        });
+
+        if (match) {
+            // Attempt to find quantity (numbers following the name or preceding it)
+            const qtyMatch = line.match(/(\d+(\.\d+)?\s*(lb|oz|kg|g|gal|qt|pt|pk|ct|pc)?)/i);
+            const quantity = qtyMatch ? qtyMatch[0] : '1 unit';
+
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + (match.shelfLife || 7));
+
+            detectedItems.push({
+                id: Date.now() + index,
+                name: match.name, // Use standard name from DB
+                category: match.category,
+                quantity: quantity,
+                expiry: expiry.toISOString().split('T')[0]
+            });
+        }
+    });
+
+    // Remove duplicates
+    return detectedItems.filter((item, index, self) =>
+        index === self.findIndex((t) => t.name === item.name)
+    );
 }
 
 function showReceiptPreview(items) {
@@ -162,17 +255,17 @@ function showReceiptPreview(items) {
             <table class="receipt-preview-table">
                 <thead>
                     <tr>
-                        <th>Item</th>
-                        <th>Category</th>
+                        <th>Item Name</th>
                         <th>Expiry</th>
-                        <th>Qty</th>
+                        <th>Category</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     ${window.receiptPreviewItems.map((item, index) => `
                         <tr>
-                            <td><input type="text" value="${item.name}" onchange="updatePreviewItem(${index}, 'name', this.value)"></td>
+                            <td><input type="text" value="${item.name}" onchange="updatePreviewItem(${index}, 'name', this.value)" placeholder="Item name"></td>
+                            <td><input type="date" value="${item.expiry}" onchange="updatePreviewItem(${index}, 'expiry', this.value)"></td>
                             <td>
                                 <select onchange="updatePreviewItem(${index}, 'category', this.value)">
                                     ${['Dairy', 'Vegetables', 'Meat', 'Fruit', 'Bakery', 'Pantry', 'Grains', 'Other'].map(cat =>
@@ -180,9 +273,7 @@ function showReceiptPreview(items) {
         ).join('')}
                                 </select>
                             </td>
-                            <td><input type="date" value="${item.expiry}" onchange="updatePreviewItem(${index}, 'expiry', this.value)"></td>
-                            <td><input type="text" value="${item.quantity}" onchange="updatePreviewItem(${index}, 'quantity', this.value)"></td>
-                            <td><button class="btn-remove-item" onclick="removePreviewItem(${index})">✕</button></td>
+                            <td><button class="btn-remove-item" onclick="removePreviewItem(${index})" title="Remove">✕</button></td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -192,29 +283,44 @@ function showReceiptPreview(items) {
 
     const previewHTML = `
         <div class="receipt-preview-container">
+            <p class="preview-instruction" style="margin-bottom: 12px; font-size: 0.9rem; color: var(--text-muted);">Please review and edit the items before adding them to your fridge.</p>
             <div id="preview-list-container">
                 ${renderPreviewList()}
             </div>
             <div class="preview-actions">
                 <button class="btn-secondary" onclick="window.closeModal()">Cancel</button>
-                <button class="btn-primary" id="finalize-receipt-btn" ${items.length === 0 ? 'disabled' : ''}>Add to Fridge</button>
+                <button class="btn-primary" id="finalize-receipt-btn" ${items.length === 0 ? 'disabled' : ''}>Add ${items.length} Items to Fridge</button>
             </div>
         </div>
     `;
 
-    window.openModal('Review Items', previewHTML);
+    window.openModal('Review Scanned Items', previewHTML);
 
     // Context-sensitive window functions for the preview
     window.updatePreviewItem = (index, field, value) => {
         window.receiptPreviewItems[index][field] = value;
+        // Update "Add X Items" button text
+        const finalizeBtn = document.getElementById('finalize-receipt-btn');
+        if (finalizeBtn) {
+            finalizeBtn.innerText = `Add ${window.receiptPreviewItems.length} Items to Fridge`;
+        }
     };
 
     window.removePreviewItem = (index) => {
         window.receiptPreviewItems.splice(index, 1);
         const container = document.getElementById('preview-list-container');
         if (container) container.innerHTML = renderPreviewList();
+
+        const finalizeBtn = document.getElementById('finalize-receipt-btn');
         if (window.receiptPreviewItems.length === 0) {
-            document.getElementById('finalize-receipt-btn').disabled = true;
+            if (finalizeBtn) {
+                finalizeBtn.disabled = true;
+                finalizeBtn.innerText = 'Add to Fridge';
+            }
+        } else {
+            if (finalizeBtn) {
+                finalizeBtn.innerText = `Add ${window.receiptPreviewItems.length} Items to Fridge`;
+            }
         }
     };
 
@@ -226,7 +332,7 @@ function showReceiptPreview(items) {
         saveAndRefresh();
         window.closeModal();
         if (window.showSuccessBanner) {
-            window.showSuccessBanner(`Added ${window.receiptPreviewItems.length} items from receipt!`);
+            window.showSuccessBanner(`Successfully added ${window.receiptPreviewItems.length} items!`);
         }
     });
 }
